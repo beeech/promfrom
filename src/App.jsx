@@ -157,7 +157,7 @@ export default function App() {
     setLoading(true);
     const { data: promptsData } = await supabase.from("prompts").select("*").order("created_at", { ascending: false });
     const { data: tagsData } = await supabase.from("tags").select("*").order("order", { ascending: true });
-    if (promptsData) setPrompts(promptsData.map(p => ({ ...p, aiTool: p.ai_tool || [], tags: p.tags || [] })));
+    if (promptsData) setPrompts(promptsData.map(p => ({ ...p, aiTool: p.ai_tool || [], tags: p.tags || [], createdAt: p.created_at ? p.created_at.split("T")[0] : "" })));
     if (tagsData) setCustomTags(tagsData.map(t => t.name));
     setLoading(false);
   };
