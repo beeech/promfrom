@@ -135,7 +135,7 @@ export default function App() {
   const [adminError, setAdminError] = useState("");
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState(null);
-  const [form, setForm] = useState({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
+  const [form, setForm] = useState({ title: "", content: "", tags: [], color: COLORS[0], aiTool: [], source: "", description: "" });
   const [newTagInput, setNewTagInput] = useState("");
   const [showNewTagInput, setShowNewTagInput] = useState(false);
   const [formTagInput, setFormTagInput] = useState("");
@@ -230,13 +230,13 @@ export default function App() {
     }
     setShowWriteForm(false);
     setEditingPrompt(null);
-    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
+    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: [], source: "", description: "" });
   };
 
   const handleEdit = (prompt, e) => {
     e?.stopPropagation();
     setEditingPrompt(prompt);
-    setForm({ title: prompt.title, content: prompt.content, tags: Array.isArray(prompt.tags) ? prompt.tags : (prompt.tag ? [prompt.tag] : []), color: prompt.color, aiTool: prompt.aiTool || "all" });
+    setForm({ title: prompt.title, content: prompt.content, tags: Array.isArray(prompt.tags) ? prompt.tags : (prompt.tag ? [prompt.tag] : []), color: prompt.color, aiTool: Array.isArray(prompt.aiTool) ? prompt.aiTool : (prompt.aiTool && prompt.aiTool !== "all" ? [prompt.aiTool] : []), source: prompt.source || "", description: prompt.description || "" });
     setShowFormTagInput(false);
     setFormTagInput("");
     setShowWriteForm(true);
@@ -253,7 +253,7 @@ export default function App() {
 
   const openWriteForm = () => {
     setEditingPrompt(null);
-    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
+    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: [], source: "", description: "" });
     setShowFormTagInput(false);
     setFormTagInput("");
     setShowWriteForm(true);
@@ -339,7 +339,7 @@ export default function App() {
               <h3 style={{ ...styles.cardTitle, color: getTextColor(prompt.color) }}>{prompt.title}</h3>
               <p style={{ ...styles.cardPreview, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.75)" : "#555" }}>{prompt.content}</p>
               <div style={styles.cardFooter}>
-                <span style={{ ...styles.cardAuthor, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{prompt.author} · {prompt.createdAt}</span>
+                <span style={{ ...styles.cardAuthor, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{isAdminMode ? `${prompt.author} · ${prompt.createdAt}` : prompt.author}</span>
                 <div style={styles.cardActions}>
                   {isAdminMode && (
                     <>
@@ -352,17 +352,17 @@ export default function App() {
                     </>
                   )}
                   <button
-                    style={{ ...styles.copyBtn, ...(copiedId === prompt.id ? styles.copyBtnDone : {}), background: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.25)" : "#2D4EFF", color: "#fff" }}
+                    style={{ ...styles.copyBtn, ...(copiedId === prompt.id ? styles.copyBtnDone : {}), background: copiedId === prompt.id ? (getTextColor(prompt.color) === "#FFFFFF" ? "#fff" : "#4CAF50") : (getTextColor(prompt.color) === "#FFFFFF" ? "#fff" : "#2D4EFF"), color: getTextColor(prompt.color) === "#FFFFFF" ? "#2D4EFF" : "#fff", fontWeight: 700 }}
                     onClick={(e) => handleCopy(prompt, e)}
                   >
                     {copiedId === prompt.id ? <><Check size={12} /> 복사됨</> : <><Copy size={12} /> 복사</>}
                   </button>
                 </div>
               </div>
-              {prompt.aiTool && prompt.aiTool !== "all" && (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: getTextColor(prompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 4 }}>
+              {(Array.isArray(prompt.aiTool) ? prompt.aiTool.length > 0 : (prompt.aiTool && prompt.aiTool !== "all")) && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: getTextColor(prompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.75)" : "#888", letterSpacing: "0.03em" }}>
-                    {AI_TOOLS.find(a => a.id === prompt.aiTool)?.emoji} {AI_TOOLS.find(a => a.id === prompt.aiTool)?.label}
+                    {(Array.isArray(prompt.aiTool) ? prompt.aiTool : [prompt.aiTool]).map(id => AI_TOOLS.find(a => a.id === id)).filter(Boolean).map(t => `${t.emoji} ${t.label}`).join(", ")}
                   </span>
                 </div>
               )}
@@ -387,9 +387,14 @@ export default function App() {
               </div>
             )}
             <h2 style={{ ...styles.modalTitle, color: getTextColor(selectedPrompt.color) }}>{selectedPrompt.title}</h2>
+            {selectedPrompt.description && (
+              <p style={{ fontSize: 13, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.85)" : "#666", lineHeight: 1.7, marginBottom: 14 }}>
+                {selectedPrompt.description}
+              </p>
+            )}
             <pre style={{ ...styles.modalContent, color: "#1A1A1A", background: "rgba(255,255,255,0.92)", border: "1px solid rgba(255,255,255,0.4)" }}>{selectedPrompt.content}</pre>
             <div style={styles.modalFooter}>
-              <span style={{ ...styles.cardAuthor, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{selectedPrompt.author} · {selectedPrompt.createdAt}</span>
+              <span style={{ ...styles.cardAuthor, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{isAdminMode ? `${selectedPrompt.author} · ${selectedPrompt.createdAt}` : selectedPrompt.author}</span>
               <div style={{ display: "flex", gap: 8 }}>
                 {isAdminMode && (
                   <>
@@ -409,11 +414,20 @@ export default function App() {
                 </button>
               </div>
             </div>
-              {selectedPrompt.aiTool && selectedPrompt.aiTool !== "all" && (
+              {(Array.isArray(selectedPrompt.aiTool) ? selectedPrompt.aiTool.length > 0 : (selectedPrompt.aiTool && selectedPrompt.aiTool !== "all")) && (
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#888", letterSpacing: "0.03em" }}>
-                    {AI_TOOLS.find(a => a.id === selectedPrompt.aiTool)?.emoji} {AI_TOOLS.find(a => a.id === selectedPrompt.aiTool)?.label}에서 활용하기 좋은 프롬프트예요
+                    {(() => {
+                      const tools = (Array.isArray(selectedPrompt.aiTool) ? selectedPrompt.aiTool : [selectedPrompt.aiTool]).map(id => AI_TOOLS.find(a => a.id === id)).filter(Boolean);
+                      return tools.map(t => `${t.emoji} ${t.label}`).join(", ") + "에서 활용하기 좋은 프롬프트예요";
+                    })()}
                   </span>
+                </div>
+              )}
+              {selectedPrompt.source && (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#aaa" }}>출처: </span>
+                  <span style={{ fontSize: 11, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#888" }}>{selectedPrompt.source}</span>
                 </div>
               )}
           </div>
@@ -464,7 +478,10 @@ export default function App() {
       {/* Write / Edit Form Modal */}
       {showWriteForm && (
         <div style={styles.overlay} onClick={() => {
-          if (form.title.trim() || form.content.trim()) {
+          const isDirty = editingPrompt
+            ? (form.title !== editingPrompt.title || form.content !== editingPrompt.content)
+            : (form.title.trim() || form.content.trim());
+          if (isDirty) {
             if (!window.confirm("작성 중인 내용이 있어요. 정말 닫을까요?")) return;
           }
           setShowWriteForm(false);
@@ -472,7 +489,10 @@ export default function App() {
         }}>
           <div style={styles.formModal} onClick={(e) => e.stopPropagation()}>
             <button style={styles.modalClose} onClick={() => {
-              if (form.title.trim() || form.content.trim()) {
+              const isDirty = editingPrompt
+                ? (form.title !== editingPrompt.title || form.content !== editingPrompt.content)
+                : (form.title.trim() || form.content.trim());
+              if (isDirty) {
                 if (!window.confirm("작성 중인 내용이 있어요. 정말 닫을까요?")) return;
               }
               setShowWriteForm(false);
@@ -488,6 +508,14 @@ export default function App() {
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
 
+            <label style={styles.label}>활용법 <span style={{fontWeight:400, color:"#aaa"}}>(선택사항)</span></label>
+            <input
+              style={styles.input}
+              placeholder="이 프롬프트 활용법을 간단히 설명해주세요"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+
             <label style={styles.label}>내용</label>
             <textarea
               style={styles.textarea}
@@ -498,12 +526,16 @@ export default function App() {
 
             <label style={styles.label}>AI 툴</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
-              {AI_TOOLS.map(ai => (
+              {AI_TOOLS.filter(ai => ai.id !== "all").map(ai => (
                 <button
                   key={ai.id}
                   type="button"
-                  style={{ ...styles.tagChip, ...(form.aiTool === ai.id ? styles.tagChipActive : {}) }}
-                  onClick={() => setForm({ ...form, aiTool: ai.id })}
+                  style={{ ...styles.tagChip, ...(Array.isArray(form.aiTool) && form.aiTool.includes(ai.id) ? styles.tagChipActive : {}) }}
+                  onClick={() => {
+                    const current = Array.isArray(form.aiTool) ? form.aiTool : [];
+                    const updated = current.includes(ai.id) ? current.filter(a => a !== ai.id) : [...current, ai.id];
+                    setForm({ ...form, aiTool: updated });
+                  }}
                 >
                   {ai.emoji} {ai.label}
                 </button>
@@ -555,6 +587,14 @@ export default function App() {
                 />
               ))}
             </div>
+
+            <label style={styles.label}>출처 <span style={{fontWeight:400, color:"#aaa"}}>(선택사항)</span></label>
+            <input
+              style={styles.input}
+              placeholder="참고한 링크나 출처를 입력하세요"
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+            />
 
             <button style={styles.saveBtn} onClick={handleSave}>
               {editingPrompt ? "수정 완료" : "저장하기"}
