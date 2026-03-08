@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = "https://gnlyyisxfncrsiehhvnn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_-uIIPeG5B7YrByAhE2nc6Q_9iJJX4F3";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Google Fonts - Syne (볼드하고 디자인된 느낌)
 const FONT_LINK = document.createElement("link");
@@ -117,14 +122,9 @@ const RESPONSIVE_CSS = `
 `;
 
 export default function App() {
-  const [prompts, setPrompts] = useState(() => {
-    const saved = localStorage.getItem("promfrom-prompts");
-    return saved ? JSON.parse(saved) : INITIAL_PROMPTS;
-  });
-  const [customTags, setCustomTags] = useState(() => {
-    const saved = localStorage.getItem("promfrom-tags");
-    return saved ? JSON.parse(saved) : INITIAL_TAGS;
-  });
+  const [prompts, setPrompts] = useState([]);
+  const [customTags, setCustomTags] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTag, setSelectedTag] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState(null);
@@ -148,13 +148,19 @@ export default function App() {
     return () => document.head.removeChild(style);
   }, []);
 
+  // Supabase 데이터 로드
   useEffect(() => {
-    localStorage.setItem("promfrom-prompts", JSON.stringify(prompts));
-  }, [prompts]);
+    loadData();
+  }, []);
 
-  useEffect(() => {
-    localStorage.setItem("promfrom-tags", JSON.stringify(customTags));
-  }, [customTags]);
+  const loadData = async () => {
+    setLoading(true);
+    const { data: promptsData } = await supabase.from("prompts").select("*").order("created_at", { ascending: false });
+    const { data: tagsData } = await supabase.from("tags").select("*").order("order", { ascending: true });
+    if (promptsData) setPrompts(promptsData.map(p => ({ ...p, aiTool: p.ai_tool || [], tags: p.tags || [] })));
+    if (tagsData) setCustomTags(tagsData.map(t => t.name));
+    setLoading(false);
+  };
 
   const allTags = ["전체", ...customTags];
 
@@ -182,11 +188,12 @@ export default function App() {
     }
   };
 
-  const handleAddFormTag = () => {
+  const handleAddFormTag = async () => {
     const trimmed = formTagInput.trim();
     if (!trimmed) return;
     if (!customTags.includes(trimmed)) {
-      setCustomTags(prev => [...prev, trimmed]);
+      await supabase.from("tags").insert([{ name: trimmed, order: customTags.length }]);
+      await loadData();
     }
     if (!form.tags.includes(trimmed)) {
       setForm(prev => ({ ...prev, tags: [...prev.tags, trimmed] }));
@@ -195,39 +202,51 @@ export default function App() {
     setShowFormTagInput(false);
   };
 
-  const handleAddTag = () => {
+  const handleAddTag = async () => {
     const trimmed = newTagInput.trim();
     if (!trimmed || customTags.includes(trimmed)) return;
-    const updated = [...customTags, trimmed];
-    setCustomTags(updated);
-    setForm({ ...form, tag: trimmed });
+    await supabase.from("tags").insert([{ name: trimmed, order: customTags.length }]);
+    await loadData();
     setNewTagInput("");
     setShowNewTagInput(false);
   };
 
-  const handleDeleteTag = (tagToDelete, e) => {
+  const handleDeleteTag = async (tagToDelete, e) => {
     e?.stopPropagation();
-    const affectedCount = prompts.filter(p => {
-      const hasTags = Array.isArray(p.tags) && p.tags.length > 0;
-      return hasTags ? p.tags.includes(tagToDelete) : p.tag === tagToDelete;
-    }).length;
+    const affectedCount = prompts.filter(p => Array.isArray(p.tags) ? p.tags.includes(tagToDelete) : p.tag === tagToDelete).length;
     if (affectedCount > 0) {
       const ok = window.confirm('"' + tagToDelete + '" 태그를 사용 중인 프롬프트가 ' + affectedCount + '개 있어요.\n삭제하면 해당 프롬프트에서 이 태그가 제거됩니다. 계속할까요?');
       if (!ok) return;
     }
-    setCustomTags(prev => prev.filter((t) => t !== tagToDelete));
-    setPrompts(prev => prev.map((p) => ({ ...p, tag: p.tag === tagToDelete ? "" : p.tag, tags: Array.isArray(p.tags) ? p.tags.filter(t => t !== tagToDelete) : [] })));
+    await supabase.from("tags").delete().eq("name", tagToDelete);
+    // 해당 태그 사용중인 프롬프트에서도 제거
+    const affected = prompts.filter(p => Array.isArray(p.tags) ? p.tags.includes(tagToDelete) : p.tag === tagToDelete);
+    for (const p of affected) {
+      const newTags = (p.tags || []).filter(t => t !== tagToDelete);
+      await supabase.from("prompts").update({ tags: newTags }).eq("id", p.id);
+    }
+    await loadData();
     if (selectedTag === tagToDelete) setSelectedTag("전체");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim() || !form.content.trim()) return;
+    const payload = {
+      title: form.title,
+      content: form.content,
+      tags: form.tags,
+      color: form.color,
+      ai_tool: form.aiTool,
+      source: form.source,
+      description: form.description,
+      author: "관리자",
+    };
     if (editingPrompt) {
-      setPrompts(prompts.map((p) => p.id === editingPrompt.id ? { ...p, ...form, tag: form.tags[0] || "" } : p));
-      if (selectedPrompt?.id === editingPrompt.id) setSelectedPrompt({ ...selectedPrompt, ...form });
+      await supabase.from("prompts").update(payload).eq("id", editingPrompt.id);
     } else {
-      setPrompts([{ id: Date.now(), ...form, tag: form.tags[0] || "", author: "관리자", createdAt: new Date().toISOString().split("T")[0] }, ...prompts]);
+      await supabase.from("prompts").insert([{ ...payload, id: Date.now() }]);
     }
+    await loadData();
     setShowWriteForm(false);
     setEditingPrompt(null);
     setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: [], source: "", description: "" });
@@ -243,10 +262,11 @@ export default function App() {
     setSelectedPrompt(null);
   };
 
-  const handleDelete = (id, e) => {
+  const handleDelete = async (id, e) => {
     e?.stopPropagation();
     if (confirm("이 프롬프트를 삭제할까요?")) {
-      setPrompts(prompts.filter((p) => p.id !== id));
+      await supabase.from("prompts").delete().eq("id", id);
+      await loadData();
       setSelectedPrompt(null);
     }
   };
@@ -258,6 +278,14 @@ export default function App() {
     setFormTagInput("");
     setShowWriteForm(true);
   };
+
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", flexDirection: "column", gap: 12 }}>
+      <div style={{ width: 40, height: 40, border: "3px solid #E8ECFF", borderTop: "3px solid #2D4EFF", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <span style={{ color: "#2D4EFF", fontWeight: 700, fontSize: 14 }}>불러오는 중...</span>
+    </div>
+  );
 
   return (
     <div style={styles.root}>
