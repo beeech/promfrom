@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://gnlyyisxfncrsiehhvnn.supabase.co";
@@ -72,7 +75,7 @@ const INITIAL_PROMPTS = [
 ];
 
 const INITIAL_TAGS = ["업무", "마케팅", "개발", "기획", "언어", "기타"];
-const AI_TOOLS = [
+const DEFAULT_AI_TOOLS = [
   { id: "all", label: "전체 공통", emoji: "✦" },
   { id: "chatgpt", label: "ChatGPT", emoji: "🤖" },
   { id: "claude", label: "Claude", emoji: "🔮" },
@@ -124,11 +127,38 @@ const RESPONSIVE_CSS = `
   }
 `;
 
+function SortableTagItem({ tag, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tag });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || "transform 200ms cubic-bezier(0.25, 1, 0.5, 1)",
+    opacity: isDragging ? 0.6 : 1,
+    boxShadow: isDragging ? "0 8px 24px rgba(45,78,255,0.2)" : "none",
+    zIndex: isDragging ? 999 : "auto",
+    position: "relative",
+    scale: isDragging ? "1.02" : "1",
+  };
+  return (
+    <div ref={setNodeRef} style={{ ...style, display: "flex", alignItems: "center", justifyContent: "space-between", background: isDragging ? "#E8ECFF" : "#F8F9FF", borderRadius: 10, padding: "10px 14px", cursor: "grab" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }} {...attributes} {...listeners}>
+        <span style={{ color: "#bbb", fontSize: 16 }}>⠿</span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{tag}</span>
+      </div>
+      <button
+        style={{ background: "#ffeded", color: "#e53935", border: "none", borderRadius: 6, width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+        onClick={(e) => onDelete(tag, e)}
+      ><X size={12} /></button>
+    </div>
+  );
+}
+
 export default function App() {
   const [prompts, setPrompts] = useState([]);
   const [customTags, setCustomTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTag, setSelectedTag] = useState("전체");
+  const [sortMode, setSortMode] = useState("latest");
+  const [shuffledPrompts, setShuffledPrompts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState(null);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
@@ -141,6 +171,12 @@ export default function App() {
   const [form, setForm] = useState({ title: "", content: "", tags: [], color: COLORS[0], aiTool: [], source: "", description: "" });
   const [newTagInput, setNewTagInput] = useState("");
   const [showNewTagInput, setShowNewTagInput] = useState(false);
+  const [showTagManager, setShowTagManager] = useState(false);
+  const [showAIToolManager, setShowAIToolManager] = useState(false);
+  const [aiTools, setAiTools] = useState(DEFAULT_AI_TOOLS);
+  const [newAIToolForm, setNewAIToolForm] = useState({ label: "", emoji: "" });
+  const [sortOrder, setSortOrder] = useState("latest");
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [formTagInput, setFormTagInput] = useState("");
   const [showFormTagInput, setShowFormTagInput] = useState(false);
 
@@ -160,18 +196,59 @@ export default function App() {
     setLoading(true);
     const { data: promptsData } = await supabase.from("prompts").select("*").order("id", { ascending: false });
     const { data: tagsData } = await supabase.from("tags").select("*").order("order", { ascending: true });
+    const { data: settingsData } = await supabase.from("settings").select("*");
     if (promptsData) setPrompts(promptsData.map(p => ({ ...p, aiTool: p.ai_tool || [], tags: p.tags || [], createdAt: p.created_at ? p.created_at.split("T")[0] : "" })));
     if (tagsData) setCustomTags(tagsData.map(t => t.name));
+    if (settingsData) {
+      const sortSetting = settingsData.find(s => s.key === "sort_order");
+      if (sortSetting) { setSortOrder(sortSetting.value); setSortMode(sortSetting.value); }
+      const aiToolsSetting = settingsData.find(s => s.key === "ai_tools");
+      if (aiToolsSetting && aiToolsSetting.value && aiToolsSetting.value !== "null") { try { setAiTools(JSON.parse(aiToolsSetting.value)); } catch(e) {} }
+    }
+    // URL ?id= 파라미터로 특정 글 자동 오픈
+    const params = new URLSearchParams(window.location.search);
+    const sharedId = params.get("id");
+    if (sharedId && promptsData) {
+      const found = promptsData.find(p => String(p.id) === String(sharedId));
+      if (found) setSelectedPrompt({ ...found, aiTool: found.ai_tool || [], tags: found.tags || [], createdAt: found.created_at ? found.created_at.split("T")[0] : "" });
+    }
     setLoading(false);
   };
 
   const allTags = ["전체", ...customTags];
 
-  const filtered = prompts.filter((p) => {
-    const matchTag = selectedTag === "전체" || (Array.isArray(p.tags) ? p.tags.includes(selectedTag) : p.tag === selectedTag);
-    const matchSearch = p.title.includes(searchQuery) || p.content.includes(searchQuery);
-    return matchTag && matchSearch;
-  });
+  // 랜덤 순서 고정 - 태그 변경시에만 재섞기
+  useEffect(() => {
+    if (sortOrder === "random") {
+      const base = prompts.filter((p) => {
+        return selectedTag === "전체" || (Array.isArray(p.tags) ? p.tags.includes(selectedTag) : p.tag === selectedTag);
+      });
+      setShuffledPrompts([...base].sort(() => Math.random() - 0.5));
+    }
+  }, [selectedTag, sortOrder, prompts.length]);
+
+  const filtered = (() => {
+    if (sortOrder === "random") {
+      return shuffledPrompts.filter(p => p.title.includes(searchQuery) || p.content.includes(searchQuery));
+    }
+    let list = prompts.filter((p) => {
+      const matchTag = selectedTag === "전체" || (Array.isArray(p.tags) ? p.tags.includes(selectedTag) : p.tag === selectedTag);
+      const matchSearch = p.title.includes(searchQuery) || p.content.includes(searchQuery);
+      return matchTag && matchSearch;
+    });
+    if (sortOrder === "popular") {
+      list = [...list].sort((a, b) => (b.click_count || 0) - (a.click_count || 0));
+    }
+    return list;
+  })();
+
+  const handleCardClick = async (prompt) => {
+    setSelectedPrompt(prompt);
+    // 클릭수 증가
+    const newCount = (prompt.click_count || 0) + 1;
+    await supabase.from("prompts").update({ click_count: newCount }).eq("id", prompt.id);
+    setPrompts(prev => prev.map(p => p.id === prompt.id ? { ...p, click_count: newCount } : p));
+  };
 
   const handleCopy = (prompt, e) => {
     e?.stopPropagation();
@@ -230,6 +307,49 @@ export default function App() {
     }
     await loadData();
     if (selectedTag === tagToDelete) setSelectedTag("전체");
+  };
+
+  const handleMoveTag = async (index, direction) => {
+    const newTags = [...customTags];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newTags.length) return;
+    [newTags[index], newTags[targetIndex]] = [newTags[targetIndex], newTags[index]];
+    setCustomTags(newTags);
+    // Supabase order 업데이트
+    for (let i = 0; i < newTags.length; i++) {
+      await supabase.from("tags").update({ order: i }).eq("name", newTags[i]);
+    }
+  };
+
+  const handleAddAITool = async () => {
+    if (!newAIToolForm.label.trim() || !newAIToolForm.emoji.trim()) return;
+    const newTool = { id: Date.now().toString(), label: newAIToolForm.label.trim(), emoji: newAIToolForm.emoji.trim() };
+    const updated = [...aiTools, newTool];
+    setAiTools(updated);
+    setNewAIToolForm({ label: "", emoji: "" });
+    await supabase.from("settings").upsert({ key: "ai_tools", value: JSON.stringify(updated) });
+  };
+
+  const handleDeleteAITool = async (id) => {
+    if (DEFAULT_AI_TOOLS.find(t => t.id === id)) {
+      alert("기본 AI 툴은 삭제할 수 없어요!");
+      return;
+    }
+    const updated = aiTools.filter(t => t.id !== id);
+    setAiTools(updated);
+    await supabase.from("settings").upsert({ key: "ai_tools", value: JSON.stringify(updated) });
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = customTags.indexOf(active.id);
+    const newIndex = customTags.indexOf(over.id);
+    const newTags = arrayMove(customTags, oldIndex, newIndex);
+    setCustomTags(newTags);
+    for (let i = 0; i < newTags.length; i++) {
+      await supabase.from("tags").update({ order: i }).eq("name", newTags[i]);
+    }
   };
 
   const handleSave = async () => {
@@ -344,21 +464,48 @@ export default function App() {
             </div>
           ))}
           {isAdminMode && (
-            <button style={styles.tagAddBtn} onClick={() => setShowNewTagInput(true)}>
-              <Plus size={13} /> 태그 추가
-            </button>
+            <>
+              <button style={styles.tagAddBtn} onClick={() => setShowNewTagInput(true)}>
+                <Plus size={13} /> 태그 추가
+              </button>
+              <button style={{ ...styles.tagAddBtn, borderColor: "#2D4EFF", color: "#2D4EFF" }} onClick={() => setShowTagManager(true)}>
+                <Tag size={13} /> 태그 관리
+              </button>
+              <button style={{ ...styles.tagAddBtn, borderColor: "#2D4EFF", color: "#2D4EFF" }} onClick={() => setShowAIToolManager(true)}>
+                🤖 AI 툴 관리
+              </button>
+            </>
           )}
         </div>
       </header>
 
+
+
       {/* Main Grid */}
       <main style={styles.main}>
+        {isAdminMode && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <select
+              value={sortOrder}
+              onChange={async (e) => {
+                const val = e.target.value;
+                setSortOrder(val);
+                await supabase.from("settings").update({ value: val }).eq("key", "sort_order");
+              }}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #D4DCFF", fontSize: 12, color: "#2D4EFF", fontWeight: 600, cursor: "pointer", background: "#fff", outline: "none" }}
+            >
+              <option value="latest">최신순</option>
+              <option value="random">랜덤</option>
+              <option value="popular">클릭순 (베스트)</option>
+            </select>
+          </div>
+        )}
         <div className="promfrom-grid">
           {filtered.map((prompt) => (
             <div
               key={prompt.id}
               style={{ ...styles.card, background: prompt.color }}
-              onClick={() => setSelectedPrompt(prompt)}
+              onClick={() => handleCardClick(prompt)}
             >
               {(prompt.tags?.length > 0 || prompt.tag) && (
                 <div style={styles.cardTagRow}>
@@ -393,7 +540,7 @@ export default function App() {
               {(Array.isArray(prompt.aiTool) ? prompt.aiTool.length > 0 : (prompt.aiTool && prompt.aiTool !== "all")) && (
                 <div style={{ marginTop: 10, paddingTop: 8, borderTop: getTextColor(prompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.75)" : "#888", letterSpacing: "0.03em" }}>
-                    {(Array.isArray(prompt.aiTool) ? prompt.aiTool : [prompt.aiTool]).map(id => AI_TOOLS.find(a => a.id === id)).filter(Boolean).map(t => `${t.emoji} ${t.label}`).join(", ")}
+                    {(Array.isArray(prompt.aiTool) ? prompt.aiTool : [prompt.aiTool]).map(id => aiTools.find(a => a.id === id)).filter(Boolean).map(t => `${t.emoji} ${t.label}`).join(", ")}
                   </span>
                 </div>
               )}
@@ -407,9 +554,9 @@ export default function App() {
 
       {/* Detail Modal */}
       {selectedPrompt && (
-        <div style={styles.overlay} onClick={() => setSelectedPrompt(null)}>
+        <div style={styles.overlay} onClick={() => { setSelectedPrompt(null); window.history.replaceState({}, '', window.location.pathname); }}>
           <div style={{ ...styles.modal, background: selectedPrompt.color }} onClick={(e) => e.stopPropagation()}>
-            <button style={{ ...styles.modalClose, background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)", color: getTextColor(selectedPrompt.color) }} onClick={() => setSelectedPrompt(null)}><X size={18} /></button>
+            <button style={{ ...styles.modalClose, background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)", color: getTextColor(selectedPrompt.color) }} onClick={() => { setSelectedPrompt(null); window.history.replaceState({}, '', window.location.pathname); }}><X size={18} /></button>
             {(selectedPrompt.tags?.length > 0 || selectedPrompt.tag) && (
               <div style={styles.modalTagRowMulti}>
                 {(selectedPrompt.tags?.length > 0 ? selectedPrompt.tags : [selectedPrompt.tag]).map(t => (
@@ -438,18 +585,29 @@ export default function App() {
                   </>
                 )}
                 <button
+                  style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.4)" : "1px solid #D4DCFF", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "#fff" : "#2D4EFF" }}
+                  onClick={() => {
+                    const url = `${window.location.origin}?id=${selectedPrompt.id}`;
+                    navigator.clipboard.writeText(url);
+                    alert("링크가 복사됐어요! 📎");
+                  }}
+                >
+                  🔗 공유
+                </button>
+                <button
                   style={{ ...styles.copyBtnLarge, ...(copiedId === selectedPrompt.id ? styles.copyBtnDone : {}), background: copiedId === selectedPrompt.id ? (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#fff' : '#4CAF50') : (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#fff' : '#2D4EFF'), color: copiedId === selectedPrompt.id ? (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#2D4EFF' : '#fff') : (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#2D4EFF' : '#fff'), fontWeight: 700, border: 'none' }}
                   onClick={(e) => handleCopy(selectedPrompt, e)}
                 >
                   {copiedId === selectedPrompt.id ? <><Check size={14} /> 복사됨!</> : <><Copy size={14} /> 클립보드에 복사</>}
                 </button>
+
               </div>
             </div>
               {(Array.isArray(selectedPrompt.aiTool) ? selectedPrompt.aiTool.length > 0 : (selectedPrompt.aiTool && selectedPrompt.aiTool !== "all")) && (
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#888", letterSpacing: "0.03em" }}>
                     {(() => {
-                      const tools = (Array.isArray(selectedPrompt.aiTool) ? selectedPrompt.aiTool : [selectedPrompt.aiTool]).map(id => AI_TOOLS.find(a => a.id === id)).filter(Boolean);
+                      const tools = (Array.isArray(selectedPrompt.aiTool) ? selectedPrompt.aiTool : [selectedPrompt.aiTool]).map(id => aiTools.find(a => a.id === id)).filter(Boolean);
                       return tools.map(t => `${t.emoji} ${t.label}`).join(", ") + "에서 활용하기 좋은 프롬프트예요";
                     })()}
                   </span>
@@ -461,6 +619,57 @@ export default function App() {
                   <span style={{ fontSize: 11, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#888" }}>{selectedPrompt.source}</span>
                 </div>
               )}
+          </div>
+        </div>
+      )}
+
+      {/* Tag Manager Modal */}
+      {showTagManager && (
+        <div style={styles.overlay} onClick={() => setShowTagManager(false)}>
+          <div style={{ ...styles.loginModal, maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <button style={styles.modalClose} onClick={() => setShowTagManager(false)}><X size={18} /></button>
+            <h2 style={styles.loginTitle}>태그 순서 관리</h2>
+            <p style={{ fontSize: 12, color: "#aaa", marginBottom: 16 }}>드래그해서 순서를 조정하세요</p>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={customTags} strategy={verticalListSortingStrategy}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {customTags.map((tag) => (
+                    <SortableTagItem key={tag} tag={tag} onDelete={handleDeleteTag} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
+        </div>
+      )}
+
+      {/* AI Tool Manager Modal */}
+      {showAIToolManager && (
+        <div style={styles.overlay} onClick={() => setShowAIToolManager(false)}>
+          <div style={{ ...styles.loginModal, maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <button style={styles.modalClose} onClick={() => setShowAIToolManager(false)}><X size={18} /></button>
+            <h2 style={styles.loginTitle}>AI 툴 관리</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {aiTools.filter(t => t.id !== "all").map(tool => (
+                <div key={tool.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#F8F9FF", borderRadius: 10, padding: "10px 14px" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{tool.emoji} {tool.label}</span>
+                  {!DEFAULT_AI_TOOLS.find(t => t.id === tool.id) && (
+                    <button
+                      style={{ background: "#ffeded", color: "#e53935", border: "none", borderRadius: 6, width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      onClick={() => handleDeleteAITool(tool.id)}
+                    ><X size={12} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ borderTop: "1px solid #eee", paddingTop: 16 }}>
+              <p style={{ fontSize: 12, color: "#aaa", marginBottom: 10 }}>새 AI 툴 추가</p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input style={{ ...styles.input, width: 60, textAlign: "center", fontSize: 20, padding: "8px" }} placeholder="🤖" value={newAIToolForm.emoji} onChange={e => setNewAIToolForm({ ...newAIToolForm, emoji: e.target.value })} maxLength={2} />
+                <input style={{ ...styles.input, flex: 1 }} placeholder="AI 툴 이름 (예: Perplexity)" value={newAIToolForm.label} onChange={e => setNewAIToolForm({ ...newAIToolForm, label: e.target.value })} />
+              </div>
+              <button style={{ ...styles.saveBtn, width: "100%" }} onClick={handleAddAITool}>추가하기</button>
+            </div>
           </div>
         </div>
       )}
@@ -557,7 +766,7 @@ export default function App() {
 
             <label style={styles.label}>AI 툴</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
-              {AI_TOOLS.filter(ai => ai.id !== "all").map(ai => (
+              {aiTools.filter(ai => ai.id !== "all").map(ai => (
                 <button
                   key={ai.id}
                   type="button"
