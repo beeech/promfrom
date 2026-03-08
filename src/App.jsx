@@ -119,6 +119,9 @@ const RESPONSIVE_CSS = `
   @media (max-width: 600px) {
     .promfrom-grid { grid-template-columns: 1fr; gap: 12px; }
   }
+  @media (max-width: 600px) {
+    body { padding: 0 !important; }
+  }
 `;
 
 export default function App() {
@@ -637,7 +640,7 @@ export default function App() {
 const styles = {
   root: { minHeight: "100vh", width: "100%", background: "#F0F4FF", fontFamily: "'Noto Sans KR', sans-serif", overflowX: "hidden" },
   header: { background: "#fff", borderBottom: "1px solid #EBEBEB", position: "sticky", top: 0, zIndex: 100 },
-  headerInner: { maxWidth: 1600, margin: "0 auto", padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" },
+  headerInner: { maxWidth: 1600, margin: "0 auto", padding: "16px clamp(12px, 4vw, 32px)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" },
   logo: { display: "flex", flexDirection: "column" },
   logoText: { fontSize: 24, fontWeight: 900, color: "#1A1A1A", letterSpacing: "-1px" },
   logoSub: { fontSize: 9, color: "#2D4EFF", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600 },
@@ -649,7 +652,7 @@ const styles = {
   adminBadge: { fontSize: 11, background: "#F0F4FF", color: "#2D4EFF", padding: "4px 10px", borderRadius: 6, fontWeight: 700, border: "1px solid #C8D4FF" },
   btnIcon: { display: "flex", alignItems: "center", gap: 6, background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   btnGhost: { display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#2D4EFF", border: "1px solid #C8D4FF", borderRadius: 8, padding: "7px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600 },
-  tagRow: { maxWidth: 1600, margin: "0 auto", padding: "0 32px 12px", display: "flex", gap: 6, overflowX: "auto", alignItems: "center", flexWrap: "wrap" },
+  tagRow: { maxWidth: 1600, margin: "0 auto", padding: "0 clamp(12px, 4vw, 32px) 12px", display: "flex", gap: 6, overflowX: "auto", alignItems: "center", flexWrap: "wrap" },
   tagItem: { position: "relative", display: "flex", alignItems: "center", gap: 2 },
   tagBtn: { padding: "5px 16px", borderRadius: 20, border: "1px solid #D4DCFF", background: "#fff", color: "#7B8FD4", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 500 },
   tagBtnActive: { background: "#2D4EFF", color: "#fff", border: "1px solid #2D4EFF", fontWeight: 700 },
@@ -663,7 +666,7 @@ const styles = {
   tagInlineInput: { padding: "6px 12px", borderRadius: 20, border: "1px solid #2D4EFF", fontSize: 12, outline: "none", width: 120, minWidth: 0, boxSizing: "border-box" },
   tagInlineConfirm: { background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
   tagInlineCancel: { background: "#eee", color: "#666", border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
-  main: { width: "100%", maxWidth: 1600, margin: "0 auto", padding: "28px 24px", boxSizing: "border-box" },
+  main: { width: "100%", maxWidth: 1600, margin: "0 auto", padding: "28px clamp(12px, 4vw, 24px)", boxSizing: "border-box" },
   grid: {},
   card: { borderRadius: 14, padding: "18px 18px 14px", cursor: "pointer", boxShadow: "0 2px 12px rgba(45,78,255,0.08)", border: "1px solid rgba(45,78,255,0.1)", transition: "box-shadow 0.2s" },
   cardTag: { display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#666", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 },
