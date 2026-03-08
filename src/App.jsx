@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Google Fonts - Syne (볼드하고 디자인된 느낌)
 const FONT_LINK = document.createElement("link");
-FONT_LINK.href = "https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap";
+FONT_LINK.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap";
 FONT_LINK.rel = "stylesheet";
 document.head.appendChild(FONT_LINK);
 import { Copy, Check, Plus, X, Tag, Edit3, Trash2, Search, Lock } from "lucide-react";
@@ -416,9 +416,9 @@ export default function App() {
       <header style={styles.header}>
         <div style={styles.headerInner}>
           <div style={styles.logo}>
-            <span style={styles.logoText}>프롬프롬</span>
+            <span style={styles.logoText}>PromFrom</span>
             <span style={styles.logoSub}>prompt bookmark</span>
-            <span style={styles.logoTagline}>쓸만한 프롬프트, 찾지 말고 꺼내 쓰세요<span style={{color:"#2D4EFF", fontWeight:700, marginLeft:2}}>_</span></span>
+            <span style={styles.logoTagline}>쓸만한 프롬프트, 프롬프롬에서 꺼내 쓰세요<span style={{color:"#2D4EFF", fontWeight:700, marginLeft:2}}>_</span></span>
           </div>
           <div style={styles.headerRight}>
             <div style={styles.searchBox}>
@@ -851,7 +851,7 @@ const styles = {
   header: { background: "#fff", borderBottom: "1px solid #EBEBEB", position: "sticky", top: 0, zIndex: 100 },
   headerInner: { maxWidth: 1600, margin: "0 auto", padding: "16px clamp(12px, 4vw, 32px)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" },
   logo: { display: "flex", flexDirection: "column" },
-  logoText: { fontSize: 24, fontWeight: 900, color: "#1A1A1A", letterSpacing: "-1px" },
+  logoText: { fontSize: 30, fontWeight: 800, color: "#1A1A1A", letterSpacing: "-2px", fontFamily: "'Noto Sans KR', sans-serif", lineHeight: 1.1 },
   logoSub: { fontSize: 9, color: "#2D4EFF", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600 },
   logoTagline: { fontSize: 11, color: "#AAA", marginTop: 4, letterSpacing: "0" },
   headerRight: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
