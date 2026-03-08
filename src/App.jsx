@@ -1,4 +1,10 @@
 import { useState, useEffect } from "react";
+
+// Google Fonts - Syne (볼드하고 디자인된 느낌)
+const FONT_LINK = document.createElement("link");
+FONT_LINK.href = "https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap";
+FONT_LINK.rel = "stylesheet";
+document.head.appendChild(FONT_LINK);
 import { Copy, Check, Plus, X, Tag, Edit3, Trash2, Search, Lock } from "lucide-react";
 
 const ADMIN_PASSWORD = "khw0508";
@@ -61,9 +67,40 @@ const INITIAL_PROMPTS = [
 ];
 
 const INITIAL_TAGS = ["업무", "마케팅", "개발", "기획", "언어", "기타"];
-const COLORS = ["#FFF9C4", "#E8F5E9", "#FCE4EC", "#E3F2FD", "#F3E5F5", "#FFF3E0", "#F0F4F8"];
+const AI_TOOLS = [
+  { id: "all", label: "전체 공통", emoji: "✦" },
+  { id: "chatgpt", label: "ChatGPT", emoji: "🤖" },
+  { id: "claude", label: "Claude", emoji: "🔮" },
+  { id: "gemini", label: "Gemini", emoji: "✨" },
+  { id: "midjourney", label: "Midjourney", emoji: "🎨" },
+  { id: "dalle", label: "DALL-E", emoji: "🖼️" },
+  { id: "stable", label: "Stable Diffusion", emoji: "🌈" },
+];
+
+const COLORS = ["#FFF9C4", "#E8F5E9", "#FCE4EC", "#E3F2FD", "#F3E5F5", "#FFF3E0", "#F0F4F8", "#2D4EFF", "#1A33CC", "#0A1FA8", "#6B82FF", "#B8CAFF"];
+
+function getTextColor(hexColor) {
+  const hex = hexColor.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 128 ? "#1A1A1A" : "#FFFFFF";
+}
+
+function lightenColor(hexColor, amount = 0.6) {
+  const hex = hexColor.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const newR = Math.round(r + (255 - r) * amount);
+  const newG = Math.round(g + (255 - g) * amount);
+  const newB = Math.round(b + (255 - b) * amount);
+  return "#" + [newR, newG, newB].map(v => v.toString(16).padStart(2, "0")).join("");
+}
 
 const RESPONSIVE_CSS = `
+
   .promfrom-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -98,7 +135,7 @@ export default function App() {
   const [adminError, setAdminError] = useState("");
   const [showWriteForm, setShowWriteForm] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState(null);
-  const [form, setForm] = useState({ title: "", content: "", tags: [], color: COLORS[0] });
+  const [form, setForm] = useState({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
   const [newTagInput, setNewTagInput] = useState("");
   const [showNewTagInput, setShowNewTagInput] = useState(false);
   const [formTagInput, setFormTagInput] = useState("");
@@ -170,9 +207,10 @@ export default function App() {
 
   const handleDeleteTag = (tagToDelete, e) => {
     e?.stopPropagation();
-    const affectedCount = prompts.filter(p =>
-      Array.isArray(p.tags) ? p.tags.includes(tagToDelete) : p.tag === tagToDelete
-    ).length;
+    const affectedCount = prompts.filter(p => {
+      const hasTags = Array.isArray(p.tags) && p.tags.length > 0;
+      return hasTags ? p.tags.includes(tagToDelete) : p.tag === tagToDelete;
+    }).length;
     if (affectedCount > 0) {
       const ok = window.confirm('"' + tagToDelete + '" 태그를 사용 중인 프롬프트가 ' + affectedCount + '개 있어요.\n삭제하면 해당 프롬프트에서 이 태그가 제거됩니다. 계속할까요?');
       if (!ok) return;
@@ -192,13 +230,13 @@ export default function App() {
     }
     setShowWriteForm(false);
     setEditingPrompt(null);
-    setForm({ title: "", content: "", tags: [], color: COLORS[0] });
+    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
   };
 
   const handleEdit = (prompt, e) => {
     e?.stopPropagation();
     setEditingPrompt(prompt);
-    setForm({ title: prompt.title, content: prompt.content, tags: Array.isArray(prompt.tags) ? prompt.tags : (prompt.tag ? [prompt.tag] : []), color: prompt.color });
+    setForm({ title: prompt.title, content: prompt.content, tags: Array.isArray(prompt.tags) ? prompt.tags : (prompt.tag ? [prompt.tag] : []), color: prompt.color, aiTool: prompt.aiTool || "all" });
     setShowFormTagInput(false);
     setFormTagInput("");
     setShowWriteForm(true);
@@ -215,7 +253,7 @@ export default function App() {
 
   const openWriteForm = () => {
     setEditingPrompt(null);
-    setForm({ title: "", content: "", tags: [], color: COLORS[0] });
+    setForm({ title: "", content: "", tags: [], color: COLORS[0], aiTool: "all" });
     setShowFormTagInput(false);
     setFormTagInput("");
     setShowWriteForm(true);
@@ -229,7 +267,7 @@ export default function App() {
           <div style={styles.logo}>
             <span style={styles.logoText}>프롬프롬</span>
             <span style={styles.logoSub}>prompt bookmark</span>
-            <span style={styles.logoTagline}>쓸만한 프롬프트, 찾지 말고 꺼내 쓰세요 ✦</span>
+            <span style={styles.logoTagline}>쓸만한 프롬프트, 찾지 말고 꺼내 쓰세요<span style={{color:"#2D4EFF", fontWeight:700, marginLeft:2}}>_</span></span>
           </div>
           <div style={styles.headerRight}>
             <div style={styles.searchBox}>
@@ -294,33 +332,40 @@ export default function App() {
               {(prompt.tags?.length > 0 || prompt.tag) && (
                 <div style={styles.cardTagRow}>
                   {(prompt.tags?.length > 0 ? prompt.tags : [prompt.tag]).map(t => (
-                    <span key={t} style={styles.cardTagChip}>{t}</span>
+                    <span key={t} style={{ ...styles.cardTagChip, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.8)" : "#555", background: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.08)" }}>{t}</span>
                   ))}
                 </div>
               )}
-              <h3 style={styles.cardTitle}>{prompt.title}</h3>
-              <p style={styles.cardPreview}>{prompt.content}</p>
+              <h3 style={{ ...styles.cardTitle, color: getTextColor(prompt.color) }}>{prompt.title}</h3>
+              <p style={{ ...styles.cardPreview, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.75)" : "#555" }}>{prompt.content}</p>
               <div style={styles.cardFooter}>
-                <span style={styles.cardAuthor}>{prompt.author} · {prompt.createdAt}</span>
+                <span style={{ ...styles.cardAuthor, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{prompt.author} · {prompt.createdAt}</span>
                 <div style={styles.cardActions}>
                   {isAdminMode && (
                     <>
-                      <button style={styles.iconBtn} onClick={(e) => handleEdit(prompt, e)}>
+                      <button style={{ ...styles.iconBtn, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.8)" : "#555", background: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.06)" }} onClick={(e) => handleEdit(prompt, e)}>
                         <Edit3 size={13} />
                       </button>
-                      <button style={{ ...styles.iconBtn, color: "#e53935" }} onClick={(e) => handleDelete(prompt.id, e)}>
+                      <button style={{ ...styles.iconBtn, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,100,100,0.9)" : "#e53935", background: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.06)" }} onClick={(e) => handleDelete(prompt.id, e)}>
                         <Trash2 size={13} />
                       </button>
                     </>
                   )}
                   <button
-                    style={{ ...styles.copyBtn, ...(copiedId === prompt.id ? styles.copyBtnDone : {}) }}
+                    style={{ ...styles.copyBtn, ...(copiedId === prompt.id ? styles.copyBtnDone : {}), background: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.25)" : "#2D4EFF", color: "#fff" }}
                     onClick={(e) => handleCopy(prompt, e)}
                   >
                     {copiedId === prompt.id ? <><Check size={12} /> 복사됨</> : <><Copy size={12} /> 복사</>}
                   </button>
                 </div>
               </div>
+              {prompt.aiTool && prompt.aiTool !== "all" && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: getTextColor(prompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: getTextColor(prompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.75)" : "#888", letterSpacing: "0.03em" }}>
+                    {AI_TOOLS.find(a => a.id === prompt.aiTool)?.emoji} {AI_TOOLS.find(a => a.id === prompt.aiTool)?.label}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
           {filtered.length === 0 && (
@@ -333,37 +378,44 @@ export default function App() {
       {selectedPrompt && (
         <div style={styles.overlay} onClick={() => setSelectedPrompt(null)}>
           <div style={{ ...styles.modal, background: selectedPrompt.color }} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.modalClose} onClick={() => setSelectedPrompt(null)}><X size={18} /></button>
+            <button style={{ ...styles.modalClose, background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)", color: getTextColor(selectedPrompt.color) }} onClick={() => setSelectedPrompt(null)}><X size={18} /></button>
             {(selectedPrompt.tags?.length > 0 || selectedPrompt.tag) && (
               <div style={styles.modalTagRowMulti}>
                 {(selectedPrompt.tags?.length > 0 ? selectedPrompt.tags : [selectedPrompt.tag]).map(t => (
-                  <span key={t} style={styles.modalTagChip}>{t}</span>
+                  <span key={t} style={{ ...styles.modalTagChip, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.85)" : "#444", background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.07)" }}>{t}</span>
                 ))}
               </div>
             )}
-            <h2 style={styles.modalTitle}>{selectedPrompt.title}</h2>
-            <pre style={styles.modalContent}>{selectedPrompt.content}</pre>
+            <h2 style={{ ...styles.modalTitle, color: getTextColor(selectedPrompt.color) }}>{selectedPrompt.title}</h2>
+            <pre style={{ ...styles.modalContent, color: "#1A1A1A", background: "rgba(255,255,255,0.92)", border: "1px solid rgba(255,255,255,0.4)" }}>{selectedPrompt.content}</pre>
             <div style={styles.modalFooter}>
-              <span style={styles.cardAuthor}>{selectedPrompt.author} · {selectedPrompt.createdAt}</span>
+              <span style={{ ...styles.cardAuthor, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.6)" : "#999" }}>{selectedPrompt.author} · {selectedPrompt.createdAt}</span>
               <div style={{ display: "flex", gap: 8 }}>
                 {isAdminMode && (
                   <>
-                    <button style={styles.btnSecondary} onClick={(e) => handleEdit(selectedPrompt, e)}>
+                    <button style={{ ...styles.btnSecondary, background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "#fff", color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "#fff" : "#333", border: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.3)" : "1px solid #ddd" }} onClick={(e) => handleEdit(selectedPrompt, e)}>
                       <Edit3 size={13} /> 수정
                     </button>
-                    <button style={styles.btnDanger} onClick={(e) => handleDelete(selectedPrompt.id, e)}>
+                    <button style={{ ...styles.btnDanger, background: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.2)" : "#fff", color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,150,150,0.95)" : "#e53935", border: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,150,150,0.4)" : "1px solid #ffcdd2" }} onClick={(e) => handleDelete(selectedPrompt.id, e)}>
                       <Trash2 size={13} /> 삭제
                     </button>
                   </>
                 )}
                 <button
-                  style={{ ...styles.copyBtnLarge, ...(copiedId === selectedPrompt.id ? styles.copyBtnDone : {}) }}
+                  style={{ ...styles.copyBtnLarge, ...(copiedId === selectedPrompt.id ? styles.copyBtnDone : {}), background: copiedId === selectedPrompt.id ? (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#fff' : '#4CAF50') : (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#fff' : '#2D4EFF'), color: copiedId === selectedPrompt.id ? (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#2D4EFF' : '#fff') : (getTextColor(selectedPrompt.color) === '#FFFFFF' ? '#2D4EFF' : '#fff'), fontWeight: 700, border: 'none' }}
                   onClick={(e) => handleCopy(selectedPrompt, e)}
                 >
                   {copiedId === selectedPrompt.id ? <><Check size={14} /> 복사됨!</> : <><Copy size={14} /> 클립보드에 복사</>}
                 </button>
               </div>
             </div>
+              {selectedPrompt.aiTool && selectedPrompt.aiTool !== "all" && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: getTextColor(selectedPrompt.color) === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#888", letterSpacing: "0.03em" }}>
+                    {AI_TOOLS.find(a => a.id === selectedPrompt.aiTool)?.emoji} {AI_TOOLS.find(a => a.id === selectedPrompt.aiTool)?.label}에서 활용하기 좋은 프롬프트예요
+                  </span>
+                </div>
+              )}
           </div>
         </div>
       )}
@@ -444,6 +496,20 @@ export default function App() {
               onChange={(e) => setForm({ ...form, content: e.target.value })}
             />
 
+            <label style={styles.label}>AI 툴</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
+              {AI_TOOLS.map(ai => (
+                <button
+                  key={ai.id}
+                  type="button"
+                  style={{ ...styles.tagChip, ...(form.aiTool === ai.id ? styles.tagChipActive : {}) }}
+                  onClick={() => setForm({ ...form, aiTool: ai.id })}
+                >
+                  {ai.emoji} {ai.label}
+                </button>
+              ))}
+            </div>
+
             <label style={styles.label}>태그 <span style={{fontWeight:400, color:"#aaa"}}>(선택사항)</span></label>
             <div style={styles.tagPickerBox}>
               {customTags.map((t) => (
@@ -501,37 +567,37 @@ export default function App() {
 }
 
 const styles = {
-  root: { minHeight: "100vh", width: "100%", background: "#F7F6F2", fontFamily: "'Noto Sans KR', sans-serif", overflowX: "hidden" },
-  header: { background: "#fff", borderBottom: "1px solid #E8E4DC", position: "sticky", top: 0, zIndex: 100 },
+  root: { minHeight: "100vh", width: "100%", background: "#F0F4FF", fontFamily: "'Noto Sans KR', sans-serif", overflowX: "hidden" },
+  header: { background: "#fff", borderBottom: "1px solid #EBEBEB", position: "sticky", top: 0, zIndex: 100 },
   headerInner: { maxWidth: 1600, margin: "0 auto", padding: "16px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" },
   logo: { display: "flex", flexDirection: "column" },
-  logoText: { fontSize: 22, fontWeight: 800, color: "#1A1A1A", letterSpacing: "-0.5px" },
-  logoSub: { fontSize: 10, color: "#999", letterSpacing: "0.1em", textTransform: "uppercase" },
-  logoTagline: { fontSize: 11, color: "#aaa", marginTop: 3, fontStyle: "italic", letterSpacing: "-0.01em" },
+  logoText: { fontSize: 24, fontWeight: 900, color: "#1A1A1A", letterSpacing: "-1px" },
+  logoSub: { fontSize: 9, color: "#2D4EFF", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 600 },
+  logoTagline: { fontSize: 11, color: "#AAA", marginTop: 4, letterSpacing: "0" },
   headerRight: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  searchBox: { display: "flex", alignItems: "center", gap: 8, background: "#F5F4F0", borderRadius: 8, padding: "8px 12px", border: "1px solid #E8E4DC" },
+  searchBox: { display: "flex", alignItems: "center", gap: 8, background: "#F0F4FF", borderRadius: 8, padding: "8px 14px", border: "1px solid #C8D4FF" },
   searchInput: { border: "none", background: "transparent", outline: "none", fontSize: 13, color: "#333", width: 160 },
   adminBadgeRow: { display: "flex", alignItems: "center", gap: 8 },
-  adminBadge: { fontSize: 11, background: "#1A1A1A", color: "#fff", padding: "3px 8px", borderRadius: 4, fontWeight: 600 },
-  btnIcon: { display: "flex", alignItems: "center", gap: 6, background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  btnGhost: { display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#666", border: "1px solid #E0DDD6", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" },
+  adminBadge: { fontSize: 11, background: "#F0F4FF", color: "#2D4EFF", padding: "4px 10px", borderRadius: 6, fontWeight: 700, border: "1px solid #C8D4FF" },
+  btnIcon: { display: "flex", alignItems: "center", gap: 6, background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  btnGhost: { display: "flex", alignItems: "center", gap: 6, background: "transparent", color: "#2D4EFF", border: "1px solid #C8D4FF", borderRadius: 8, padding: "7px 14px", fontSize: 12, cursor: "pointer", fontWeight: 600 },
   tagRow: { maxWidth: 1600, margin: "0 auto", padding: "0 32px 12px", display: "flex", gap: 6, overflowX: "auto", alignItems: "center", flexWrap: "wrap" },
   tagItem: { position: "relative", display: "flex", alignItems: "center", gap: 2 },
-  tagBtn: { padding: "5px 14px", borderRadius: 20, border: "1px solid #E0DDD6", background: "transparent", color: "#666", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" },
-  tagBtnActive: { background: "#1A1A1A", color: "#fff", border: "1px solid #1A1A1A" },
+  tagBtn: { padding: "5px 16px", borderRadius: 20, border: "1px solid #D4DCFF", background: "#fff", color: "#7B8FD4", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 500 },
+  tagBtnActive: { background: "#2D4EFF", color: "#fff", border: "1px solid #2D4EFF", fontWeight: 700 },
   tagDeleteBtn: { background: "#ffeded", border: "none", borderRadius: "50%", width: 18, height: 18, minWidth: 18, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e53935", flexShrink: 0, padding: 0 },
   tagAddBtn: { display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, border: "1px dashed #bbb", background: "transparent", color: "#999", fontSize: 12, cursor: "pointer" },
-  tagPickerBox: { display: "flex", flexWrap: "wrap", gap: 8, padding: "12px", background: "#F7F6F2", borderRadius: 10, border: "1px solid #E8E4DC", marginTop: 2, alignItems: "center" },
-  tagChip: { padding: "5px 14px", borderRadius: 20, border: "1px solid #D0CCC4", background: "#fff", color: "#555", fontSize: 12, cursor: "pointer", fontWeight: 500 },
-  tagChipActive: { background: "#1A1A1A", color: "#fff", border: "1px solid #1A1A1A" },
+  tagPickerBox: { display: "flex", flexWrap: "wrap", gap: 8, padding: "14px", background: "#F0F4FF", borderRadius: 10, border: "1px solid #D4DCFF", marginTop: 2, alignItems: "center" },
+  tagChip: { padding: "5px 14px", borderRadius: 20, border: "1px solid #D4DCFF", background: "#fff", color: "#555", fontSize: 12, cursor: "pointer", fontWeight: 500 },
+  tagChipActive: { background: "#2D4EFF", color: "#fff", border: "1px solid #2D4EFF" },
   tagChipAdd: { display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, border: "1px dashed #bbb", background: "transparent", color: "#999", fontSize: 12, cursor: "pointer" },
   tagInlineInputRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "nowrap", minWidth: 0 },
-  tagInlineInput: { padding: "6px 12px", borderRadius: 20, border: "1px solid #1A1A1A", fontSize: 12, outline: "none", width: 120, minWidth: 0, boxSizing: "border-box" },
-  tagInlineConfirm: { background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
+  tagInlineInput: { padding: "6px 12px", borderRadius: 20, border: "1px solid #2D4EFF", fontSize: 12, outline: "none", width: 120, minWidth: 0, boxSizing: "border-box" },
+  tagInlineConfirm: { background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
   tagInlineCancel: { background: "#eee", color: "#666", border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" },
   main: { width: "100%", maxWidth: 1600, margin: "0 auto", padding: "28px 24px", boxSizing: "border-box" },
   grid: {},
-  card: { borderRadius: 12, padding: "18px 18px 14px", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.06)" },
+  card: { borderRadius: 14, padding: "18px 18px 14px", cursor: "pointer", boxShadow: "0 2px 12px rgba(45,78,255,0.08)", border: "1px solid rgba(45,78,255,0.1)", transition: "box-shadow 0.2s" },
   cardTag: { display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#666", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 },
   cardTitle: { fontSize: 15, fontWeight: 700, color: "#1A1A1A", marginBottom: 8, lineHeight: 1.4 },
   cardPreview: { fontSize: 12, color: "#555", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 12 },
@@ -539,12 +605,12 @@ const styles = {
   cardAuthor: { fontSize: 10, color: "#999" },
   cardActions: { display: "flex", gap: 6, alignItems: "center" },
   iconBtn: { background: "rgba(0,0,0,0.06)", border: "none", borderRadius: 6, padding: "4px 6px", cursor: "pointer", color: "#555", display: "flex" },
-  copyBtn: { display: "flex", alignItems: "center", gap: 4, background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" },
+  copyBtn: { display: "flex", alignItems: "center", gap: 4, background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" },
   copyBtnDone: { background: "#4CAF50" },
-  copyBtnLarge: { display: "flex", alignItems: "center", gap: 6, background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" },
-  empty: { gridColumn: "1/-1", textAlign: "center", padding: 60, color: "#999", fontSize: 15 },
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 },
-  modal: { borderRadius: 16, padding: 28, width: "100%", maxWidth: 540, position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "85vh", overflowY: "auto", display: "flex", flexDirection: "column" },
+  copyBtnLarge: { display: "flex", alignItems: "center", gap: 6, background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  empty: { gridColumn: "1/-1", textAlign: "center", padding: 60, color: "#7B8FD4", fontSize: 15 },
+  overlay: { position: "fixed", inset: 0, background: "rgba(10,15,50,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 20 },
+  modal: { borderRadius: 20, padding: 32, width: "100%", maxWidth: 560, position: "relative", boxShadow: "0 30px 80px rgba(0,0,0,0.5), 0 0 0 1.5px rgba(255,255,255,0.3)", maxHeight: "85vh", overflowY: "auto", display: "flex", flexDirection: "column" },
   modalClose: { position: "absolute", top: 12, right: 12, background: "rgba(0,0,0,0.1)", border: "none", borderRadius: 6, padding: "5px 7px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, lineHeight: 1 },
   modalTagRow: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#666", marginBottom: 10 },
   modalTitle: { fontSize: 20, fontWeight: 800, color: "#1A1A1A", marginBottom: 14 },
@@ -552,22 +618,22 @@ const styles = {
   modalFooter: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   btnSecondary: { display: "flex", alignItems: "center", gap: 5, background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" },
   btnDanger: { display: "flex", alignItems: "center", gap: 5, background: "#fff", border: "1px solid #ffcdd2", color: "#e53935", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" },
-  loginModal: { background: "#fff", borderRadius: 16, padding: "36px 32px 32px", width: "100%", maxWidth: 380, position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "visible" },
+  loginModal: { background: "#fff", borderRadius: 20, padding: "36px 32px 32px", width: "100%", maxWidth: 380, position: "relative", boxShadow: "0 20px 60px rgba(45,78,255,0.15)", overflow: "visible" },
   loginTitle: { fontSize: 20, fontWeight: 800, marginBottom: 6 },
   loginDesc: { fontSize: 13, color: "#888", marginBottom: 20 },
-  loginInput: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #E0DDD6", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 8 },
-  loginBtn: { width: "100%", padding: "12px", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
+  loginInput: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #D4DCFF", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 8 },
+  loginBtn: { width: "100%", padding: "13px", background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
   errorText: { fontSize: 12, color: "#e53935", marginBottom: 4 },
-  formModal: { background: "#fff", borderRadius: 16, padding: "40px 28px 28px", width: "100%", maxWidth: 520, position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" },
+  formModal: { background: "#fff", borderRadius: 20, padding: "40px 32px 32px", width: "100%", maxWidth: 520, position: "relative", boxShadow: "0 20px 60px rgba(45,78,255,0.15)", maxHeight: "90vh", overflowY: "auto" },
   formTitle: { fontSize: 18, fontWeight: 800, marginBottom: 20 },
   label: { display: "block", fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6, marginTop: 14 },
-  input: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E0DDD6", fontSize: 14, outline: "none", boxSizing: "border-box" },
-  textarea: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E0DDD6", fontSize: 13, outline: "none", boxSizing: "border-box", minHeight: 140, resize: "vertical", lineHeight: 1.6, fontFamily: "inherit" },
+  input: { width: "100%", padding: "11px 14px", borderRadius: 8, border: "1px solid #D4DCFF", fontSize: 14, outline: "none", boxSizing: "border-box" },
+  textarea: { width: "100%", padding: "11px 14px", borderRadius: 8, border: "1px solid #D4DCFF", fontSize: 13, outline: "none", boxSizing: "border-box", minHeight: 140, resize: "vertical", lineHeight: 1.7, fontFamily: "inherit" },
   formRow: { display: "flex", gap: 16, alignItems: "flex-start", marginTop: 4 },
   select: { padding: "9px 12px", borderRadius: 8, border: "1px solid #E0DDD6", fontSize: 13, outline: "none", width: "100%" },
   colorRow: { display: "flex", gap: 6, marginTop: 6 },
   colorDot: { width: 24, height: 24, borderRadius: "50%", cursor: "pointer" },
-  saveBtn: { width: "100%", padding: "12px", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 20 },
+  saveBtn: { width: "100%", padding: "13px", background: "#2D4EFF", color: "#fff", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 20 },
   cardTagRow: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 },
   cardTagChip: { fontSize: 10, color: "#555", background: "rgba(0,0,0,0.08)", borderRadius: 10, padding: "2px 8px", fontWeight: 600 },
   modalTagRowMulti: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 },
