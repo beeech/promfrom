@@ -229,11 +229,11 @@ export default function App() {
 
   const filtered = (() => {
     if (sortOrder === "random") {
-      return shuffledPrompts.filter(p => p.title.includes(searchQuery) || p.content.includes(searchQuery));
+      const q = searchQuery.toLowerCase(); return shuffledPrompts.filter(p => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q));
     }
     let list = prompts.filter((p) => {
       const matchTag = selectedTag === "전체" || (Array.isArray(p.tags) ? p.tags.includes(selectedTag) : p.tag === selectedTag);
-      const matchSearch = p.title.includes(searchQuery) || p.content.includes(searchQuery);
+      const q = searchQuery.toLowerCase(); const matchSearch = p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q);
       return matchTag && matchSearch;
     });
     if (sortOrder === "popular") {
